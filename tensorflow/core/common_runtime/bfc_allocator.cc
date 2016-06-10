@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -576,6 +576,10 @@ string BFCAllocator::RenderOccupancy() {
   size_t total_region_size = 0;
   for (const auto& region : region_manager_.regions()) {
     total_region_size += region.memory_size();
+  }
+
+  if (total_region_size == 0) {
+    return "<allocator contains no memory>";
   }
 
   // Start out with everything empty

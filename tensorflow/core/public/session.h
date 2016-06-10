@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -111,6 +111,9 @@ class Session {
   ///
   /// REQUIRES: The name of each Tensor of the input or output must
   /// match a "Tensor endpoint" in the `GraphDef` passed to `Create()`.
+  ///
+  /// REQUIRES: At least one of `output_tensor_names` and
+  /// `target_node_names` must be non-empty.
   ///
   /// REQUIRES: outputs is not nullptr if `output_tensor_names` is non-empty.
   virtual Status Run(const std::vector<std::pair<string, Tensor> >& inputs,

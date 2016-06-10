@@ -1,4 +1,4 @@
-/* Copyright 2016 Google Inc. All Rights Reserved.
+/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,11 +20,12 @@ namespace tensorflow {
 ImmutableConstantOp::ImmutableConstantOp(OpKernelConstruction* context)
     : OpKernel(context) {
   ::tensorflow::DataType dtype;
-  OP_REQUIRES_OK(context, context->GetAttr("dtype", &dtype));
+  OP_REQUIRES_OK(context, context->GetAttr(kDTypeAttr, &dtype));
   ::tensorflow::TensorShape shape;
-  OP_REQUIRES_OK(context, context->GetAttr("shape", &shape));
+  OP_REQUIRES_OK(context, context->GetAttr(kShapeAttr, &shape));
   string region_name;
-  OP_REQUIRES_OK(context, context->GetAttr("memory_region_name", &region_name));
+  OP_REQUIRES_OK(context,
+                 context->GetAttr(kMemoryRegionNameAttr, &region_name));
   OP_REQUIRES_OK(context,
                  allocator_.InitWithMemoryRegion(region_name, context->env()));
   tensor_ = ::tensorflow::Tensor(&allocator_, dtype, shape);
@@ -89,6 +90,10 @@ void ImmutableConstantOp::ReadOnlyMemoryRegionAllocator::DeallocateRaw(
         << "Deallocating not allocated region for readonly memory region";
   }
 }
+
+constexpr char ImmutableConstantOp::kDTypeAttr[];
+constexpr char ImmutableConstantOp::kShapeAttr[];
+constexpr char ImmutableConstantOp::kMemoryRegionNameAttr[];
 
 REGISTER_KERNEL_BUILDER(Name("ImmutableConst").Device(DEVICE_CPU),
                         ImmutableConstantOp);

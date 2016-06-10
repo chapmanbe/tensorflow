@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import tensorflow as tf
 
 class DeviceSetterTest(tf.test.TestCase):
 
-  _cluster_spec = tf.ClusterSpec({
+  _cluster_spec = tf.train.ClusterSpec({
       "ps": ["ps0:2222", "ps1:2222"],
       "worker": ["worker0:2222", "worker1:2222", "worker2:2222"]})
 
@@ -39,7 +39,7 @@ class DeviceSetterTest(tf.test.TestCase):
 
   def testPS2TasksWithClusterSpecDict(self):
     with tf.device(tf.train.replica_device_setter(
-        cluster=self._cluster_spec.as_cluster_spec())):
+        cluster=self._cluster_spec.as_dict())):
       v = tf.Variable([1, 2])
       w = tf.Variable([2, 1])
       a = v + w
@@ -62,7 +62,7 @@ class DeviceSetterTest(tf.test.TestCase):
       self.assertDeviceEqual("/job:worker", a.device)
 
   def testPS2TasksWithDevice(self):
-    cluster_spec = tf.ClusterSpec({
+    cluster_spec = tf.train.ClusterSpec({
         "sun": ["sun0:2222", "sun1:2222", "sun2:2222"],
         "moon": ["moon0:2222", "moon1:2222"]})
 

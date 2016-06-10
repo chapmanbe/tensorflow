@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2016 Google Inc. All Rights Reserved.
+# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,10 +21,25 @@
 #
 # Usage:
 #   remote_test.sh [--setup-cluster-only]
+#                  [--num-workers <NUM_WORKERS>]
+#                  [--num-parameter-servers <NUM_PARAMETER_SERVERS>]
+#                  [--sync-replicas]
+#
 # Arguments:
 #   --setup-cluster-only:
 #       Setup the TensorFlow k8s cluster only, and do not perform testing of
 #       the distributed runtime.
+#
+# --num-workers <NUM_WORKERS>:
+#   Specifies the number of worker pods to start
+#
+# --num-parameter-server <NUM_PARAMETER_SERVERS>:
+#   Specifies the number of parameter servers to start
+#
+# --sync-replicas
+#   Use the synchronized-replica mode. The parameter updates from the replicas
+#   (workers) will be aggregated before applied, which avoids stale parameter
+#   updates.
 #
 #
 # If any of the following environment variable has non-empty values, it will
@@ -86,7 +101,7 @@ docker build ${NO_CACHE_FLAG} \
     -t ${DOCKER_IMG_NAME} -f "${DIR}/Dockerfile" "${DIR}"
 KEY_FILE_DIR=${TF_DIST_GCLOUD_KEY_FILE_DIR:-"${HOME}/gcloud-secrets"}
 
-docker run -v ${KEY_FILE_DIR}:/var/gcloud/secrets \
+docker run --rm -v ${KEY_FILE_DIR}:/var/gcloud/secrets \
   ${DOCKER_ENV_FLAGS} \
   ${DOCKER_IMG_NAME} \
   /var/tf-dist-test/scripts/dist_test.sh $@

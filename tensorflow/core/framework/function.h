@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -251,12 +251,22 @@ class FunctionCallFrame {
 // FunctionDefLibrary and function definitions.
 class FunctionLibraryDefinition : public OpRegistryInterface {
  public:
+  explicit FunctionLibraryDefinition(const FunctionLibraryDefinition& lib_def);
   explicit FunctionLibraryDefinition(const FunctionDefLibrary& lib_def);
   ~FunctionLibraryDefinition() override;
+
+  FunctionLibraryDefinition& operator=(const FunctionLibraryDefinition&) =
+      delete;
 
   // Returns nullptr if "func" is not defined in "lib_def". Otherwise,
   // returns its definition proto.
   const FunctionDef* Find(const string& func) const;
+
+  // Adds function definition 'fdef' to this function library.
+  // Returns status 'ok' on success, or error otherwise.
+  // If 'fdef' is successfully added to the library, it will be accessible
+  // from 'LookUp' and included in the proto returned by 'ToProto'.
+  Status AddFunctionDef(const FunctionDef& fdef);
 
   // If the gradient function for 'func' is specified explicitly in
   // the library, returns the gradient function name.  Otherwise,
@@ -270,15 +280,19 @@ class FunctionLibraryDefinition : public OpRegistryInterface {
   // signature.
   const OpDef* LookUp(const string& op, Status* status) const override;
 
+  // Returns a proto representation of the state of this function library.
+  FunctionDefLibrary ToProto() const;
+
  private:
   std::unordered_map<string, FunctionDef> function_defs_;
   std::unordered_map<string, string> func_grad_;
-
-  TF_DISALLOW_COPY_AND_ASSIGN(FunctionLibraryDefinition);
 };
 
 // Forward declare. Defined in common_runtime/function.h
 struct FunctionBody;
+
+// Forward declare. Defined in common_runtime/device.h
+class Device;
 
 class FunctionLibraryRuntime {
  public:
@@ -314,6 +328,8 @@ class FunctionLibraryRuntime {
     CancellationManager* cancellation_manager = nullptr;
     // The id of the step that is calling this function.
     int64 step_id = 0;
+
+    std::function<void(std::function<void()>)>* runner = nullptr;
   };
   typedef std::function<void(const Status&)> DoneCallback;
   virtual void Run(const Options& opts, Handle handle,
@@ -328,6 +344,9 @@ class FunctionLibraryRuntime {
 
   // Return true iff 'function' is stateful.
   virtual bool IsStateful(const string& function_name) = 0;
+
+  // Return the device on which the function executes.
+  virtual Device* device() = 0;
 };
 
 // To register a gradient function for a builtin op, one should use

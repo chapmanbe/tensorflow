@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "tensorflow/core/common_runtime/device.h"
 #include "tensorflow/core/framework/rendezvous.h"
+#include "tensorflow/core/framework/session_state.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/lib/core/notification.h"
@@ -85,6 +86,8 @@ class Executor {
     StepStatsCollector* stats_collector = nullptr;
     FunctionCallFrame* call_frame = nullptr;
     CancellationManager* cancellation_manager = nullptr;
+    SessionState* session_state = nullptr;
+    TensorStore* tensor_store = nullptr;
 
     typedef std::function<void()> Closure;
     typedef std::function<void(Closure)> Runner;

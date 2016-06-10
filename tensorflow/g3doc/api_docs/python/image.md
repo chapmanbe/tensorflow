@@ -235,7 +235,7 @@ the same as `new_width`, `new_height`.  To avoid distortions see
 *  <b>`new_height`</b>: integer.
 *  <b>`new_width`</b>: integer.
 *  <b>`method`</b>: ResizeMethod.  Defaults to `ResizeMethod.BILINEAR`.
-*  <b>`align_corners`</b>: bool. If true, exactly align all 4 cornets of the input and
+*  <b>`align_corners`</b>: bool. If true, exactly align all 4 corners of the input and
                  output. Defaults to `false`.
 
 ##### Raises:
@@ -265,7 +265,7 @@ Input images can be of different types but output images are always float.
 ##### Args:
 
 
-*  <b>`images`</b>: A `Tensor`. Must be one of the following types: `uint8`, `int8`, `int16`, `int32`, `int64`, `float32`, `float64`.
+*  <b>`images`</b>: A `Tensor`. Must be one of the following types: `uint8`, `int8`, `int16`, `int32`, `int64`, `half`, `float32`, `float64`.
     4-D with shape `[batch, height, width, channels]`.
 *  <b>`size`</b>: A 1-D int32 Tensor of 2 elements: `new_height, new_width`.  The
     new size for the images.
@@ -292,7 +292,7 @@ Input images can be of different types but output images are always float.
 ##### Args:
 
 
-*  <b>`images`</b>: A `Tensor`. Must be one of the following types: `uint8`, `int8`, `int16`, `int32`, `int64`, `float32`, `float64`.
+*  <b>`images`</b>: A `Tensor`. Must be one of the following types: `uint8`, `int8`, `int16`, `int32`, `int64`, `half`, `float32`, `float64`.
     4-D with shape `[batch, height, width, channels]`.
 *  <b>`size`</b>: A 1-D int32 Tensor of 2 elements: `new_height, new_width`.  The
     new size for the images.
@@ -319,7 +319,7 @@ Input images can be of different types but output images are always float.
 ##### Args:
 
 
-*  <b>`images`</b>: A `Tensor`. Must be one of the following types: `uint8`, `int8`, `int16`, `int32`, `int64`, `float32`, `float64`.
+*  <b>`images`</b>: A `Tensor`. Must be one of the following types: `uint8`, `int8`, `int16`, `int32`, `int64`, `half`, `float32`, `float64`.
     4-D with shape `[batch, height, width, channels]`.
 *  <b>`size`</b>: A 1-D int32 Tensor of 2 elements: `new_height, new_width`.  The
     new size for the images.
@@ -344,7 +344,7 @@ Resize `images` to `size` using nearest neighbor interpolation.
 ##### Args:
 
 
-*  <b>`images`</b>: A `Tensor`. Must be one of the following types: `uint8`, `int8`, `int16`, `int32`, `int64`, `float32`, `float64`.
+*  <b>`images`</b>: A `Tensor`. Must be one of the following types: `uint8`, `int8`, `int16`, `int32`, `int64`, `half`, `float32`, `float64`.
     4-D with shape `[batch, height, width, channels]`.
 *  <b>`size`</b>: A 1-D int32 Tensor of 2 elements: `new_height, new_width`.  The
     new size for the images.
@@ -700,7 +700,7 @@ hsv_image = tf.image.rgb_to_hsv(rgb_image)
 
 - - -
 
-### `tf.image.rgb_to_grayscale(images)` {#rgb_to_grayscale}
+### `tf.image.rgb_to_grayscale(images, name=None)` {#rgb_to_grayscale}
 
 Converts one or more images from RGB to Grayscale.
 
@@ -713,6 +713,7 @@ pixels.
 
 *  <b>`images`</b>: The RGB tensor to convert. Last dimension must have size 3 and
     should contain RGB values.
+*  <b>`name`</b>: A name for the operation (optional).
 
 ##### Returns:
 
@@ -721,7 +722,7 @@ pixels.
 
 - - -
 
-### `tf.image.grayscale_to_rgb(images)` {#grayscale_to_rgb}
+### `tf.image.grayscale_to_rgb(images, name=None)` {#grayscale_to_rgb}
 
 Converts one or more images from Grayscale to RGB.
 
@@ -732,6 +733,7 @@ last dimension of the output is 3, containing the RGB value of the pixels.
 
 
 *  <b>`images`</b>: The Grayscale tensor to convert. Last dimension must be size 1.
+*  <b>`name`</b>: A name for the operation (optional).
 
 ##### Returns:
 
@@ -1132,7 +1134,7 @@ Parts of the bounding box may fall outside the image.
 ##### Args:
 
 
-*  <b>`images`</b>: A `Tensor` of type `float32`.
+*  <b>`images`</b>: A `Tensor`. Must be one of the following types: `float32`, `half`.
     4-D with shape `[batch, height, width, depth]`. A batch of images.
 *  <b>`boxes`</b>: A `Tensor` of type `float32`.
     3-D with shape `[batch, num_bounding_boxes, 4]` containing bounding
@@ -1141,7 +1143,7 @@ Parts of the bounding box may fall outside the image.
 
 ##### Returns:
 
-  A `Tensor` of type `float32`.
+  A `Tensor`. Has the same type as `images`.
   4-D with the same shape as `images`. The batch of input images with
   bounding boxes drawn on the images.
 

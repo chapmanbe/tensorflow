@@ -1,4 +1,4 @@
-/* Copyright 2016 Google Inc. All Rights Reserved.
+/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,6 +31,11 @@ class ImmutableConstantOp : public OpKernel {
   void Compute(OpKernelContext* ctx) override;
   bool IsExpensive() override { return false; }
   ~ImmutableConstantOp() override;
+
+  // Names of attributes that are used by this op
+  static constexpr char kDTypeAttr[] = "dtype";
+  static constexpr char kShapeAttr[] = "shape";
+  static constexpr char kMemoryRegionNameAttr[] = "memory_region_name";
 
  private:
   class ReadOnlyMemoryRegionAllocator : public ::tensorflow::Allocator {

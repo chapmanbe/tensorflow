@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/rendezvous.h"
 #include "tensorflow/core/framework/selective_registration.h"
+#include "tensorflow/core/framework/session_state.h"
 #include "tensorflow/core/framework/step_stats.pb.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor_shape.h"
@@ -41,6 +42,7 @@ limitations under the License.
 #include "tensorflow/core/framework/unique_tensor_references.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
+#include "tensorflow/core/lib/gtl/manual_constructor.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/macros.h"
@@ -488,6 +490,7 @@ class OpKernelContext {
     }
 
     bool track_allocations = false;
+    bool log_memory = false;
 
     // Array indexed by output number for this node
     const AllocatorAttributes* output_attr_array = nullptr;
@@ -501,6 +504,12 @@ class OpKernelContext {
     // Mechanism used by this op kernel invocation to communicate with
     // computations running on other devices.
     Rendezvous* rendezvous = nullptr;
+
+    // The session state for this op.
+    SessionState* session_state = nullptr;
+
+    // The tensor store for this op.
+    TensorStore* tensor_store = nullptr;
 
     // Mechanism used by this op kernel invocation to register a callback
     // for its cancellation.
@@ -524,6 +533,7 @@ class OpKernelContext {
     // Function call supports.
     FunctionCallFrame* call_frame = nullptr;
     FunctionLibraryRuntime* function_library = nullptr;
+    std::function<void(std::function<void()>)>* runner = nullptr;
 
     // TensorSliceReaderCache support.
     checkpoint::TensorSliceReaderCacheWrapper* slice_reader_cache = nullptr;
@@ -841,6 +851,12 @@ class OpKernelContext {
   // Rendezvous Send() and Recv().
   Rendezvous* rendezvous() const { return params_->rendezvous; }
 
+  // An op kernel can access the session state it belongs to.
+  SessionState* session_state() const { return params_->session_state; }
+
+  // An op kernel can access the tensor store of the run it belongs to.
+  TensorStore* tensor_store() const { return params_->tensor_store; }
+
   // Function call support.
   //
   // If this kernel invocation is within a function execution,
@@ -851,6 +867,10 @@ class OpKernelContext {
   // library. E.g., CHECK_NOTNULL(function_library())->Run("Foo", ...).
   FunctionLibraryRuntime* function_library() const {
     return params_->function_library;
+  }
+
+  std::function<void(std::function<void()>)>* runner() const {
+    return params_->runner;
   }
 
   // Shared resources accessible to this kernel.
@@ -955,7 +975,10 @@ class OpKernelContext {
   mutable mutex mu_;  // mutable so const accessors can acquire the lock
   gtl::InlinedVector<WrappedAllocator, 4> wrapped_allocators_ GUARDED_BY(mu_);
   gtl::InlinedVector<TensorValue, 4> outputs_;
-  UniqueTensorReferences referenced_tensors_ GUARDED_BY(mu_);
+
+  // Constructed only if <record_tensor_accesses_>.
+  ManualConstructor<UniqueTensorReferences> referenced_tensors_ GUARDED_BY(mu_);
+
   bool is_output_dead_ = false;
   bool record_tensor_accesses_ = false;
 
@@ -1031,15 +1054,16 @@ typedef ::tensorflow::KernelDefBuilder Name;
 #define REGISTER_KERNEL_BUILDER_UNIQ_HELPER(ctr, kernel_builder, ...) \
   REGISTER_KERNEL_BUILDER_UNIQ(ctr, kernel_builder, __VA_ARGS__)
 
-#define REGISTER_KERNEL_BUILDER_UNIQ(ctr, kernel_builder, ...)        \
-  static ::tensorflow::kernel_factory::OpKernelRegistrar              \
-      registrar__body__##ctr##__object(                               \
-          SHOULD_REGISTER_OP_KERNEL(#__VA_ARGS__)                     \
-              ? ::tensorflow::register_kernel::kernel_builder.Build() \
-              : nullptr,                                              \
-          #__VA_ARGS__,                                               \
-          [](::tensorflow::OpKernelConstruction* context)             \
-              -> ::tensorflow::OpKernel* { return new __VA_ARGS__(context); })
+#define REGISTER_KERNEL_BUILDER_UNIQ(ctr, kernel_builder, ...)          \
+  static ::tensorflow::kernel_factory::OpKernelRegistrar                \
+      registrar__body__##ctr##__object(                                 \
+          SHOULD_REGISTER_OP_KERNEL(#__VA_ARGS__)                       \
+              ? ::tensorflow::register_kernel::kernel_builder.Build()   \
+              : nullptr,                                                \
+          #__VA_ARGS__, [](::tensorflow::OpKernelConstruction* context) \
+                            -> ::tensorflow::OpKernel* {                \
+                              return new __VA_ARGS__(context);          \
+                            });
 
 void* GlobalKernelRegistry();
 
@@ -1113,7 +1137,7 @@ inline void OpKernelContext::retrieve_accessed_tensors(
     TensorReferenceVector* out_vector) {
   if (record_tensor_accesses_) {
     mutex_lock l(mu_);
-    referenced_tensors_.FreezeAndReturnReferences(out_vector);
+    referenced_tensors_->FreezeAndReturnReferences(out_vector);
   }
 }
 
@@ -1236,21 +1260,6 @@ inline void OpOutputList::set_ref(int i, mutex* mu, Tensor* tensor_for_ref) {
 //   OP_REQUIRES_OK(context, status);
 //   ...
 // }
-
-// Declares an op deprecated, and illegal starting at GraphDef version VERSION
-#define OP_DEPRECATED(CTX, VERSION, NOTE)                                      \
-  if ((CTX)->graph_def_version() >= (VERSION)) {                               \
-    ::tensorflow::Status _s(::tensorflow::errors::Unimplemented(               \
-        "Op ", (CTX)->op_def().name(),                                         \
-        " is not available in GraphDef version ", (CTX)->graph_def_version(),  \
-        ". It has been removed in version ", (VERSION), ". ", (NOTE), "."));   \
-    (CTX)->CtxFailure(_s);                                                     \
-    return;                                                                    \
-  } else {                                                                     \
-    LOG(WARNING) << "Op is deprecated."                                        \
-                 << " It will cease to work in GraphDef version " << (VERSION) \
-                 << ". " << (NOTE) << ".";                                     \
-  }
 
 #define OP_REQUIRES(CTX, EXP, STATUS) \
   if (!TF_PREDICT_TRUE(EXP)) {        \

@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/util/mirror_pad_mode.h"
+#include "tensorflow/core/util/padding.h"
 
 namespace tensorflow {
 
@@ -152,11 +153,7 @@ memory_region_name: Name of readonly memory region used by the tensor, see
 )doc");
 
 // --------------------------------------------------------------------------
-REGISTER_OP("ZerosLike")
-    .Input("x: T")
-    .Output("y: T")
-    .Attr("T: type")
-    .Doc(R"doc(
+REGISTER_OP("ZerosLike").Input("x: T").Output("y: T").Attr("T: type").Doc(R"doc(
 Returns a tensor of zeros with the same shape and type as x.
 
 x: a tensor of type T.
@@ -167,7 +164,7 @@ y: a tensor of the same shape and type as x but filled with zeros.
 REGISTER_OP("Diag")
     .Input("diagonal: T")
     .Output("output: T")
-    .Attr("T: {float, double, int32, int64}")
+    .Attr("T: {float, double, int32, int64, complex64}")
     .Doc(R"doc(
 Returns a diagonal tensor with a given diagonal values.
 
@@ -196,7 +193,7 @@ diagonal: Rank k tensor where k is at most 3.
 REGISTER_OP("DiagPart")
     .Input("input: T")
     .Output("diagonal: T")
-    .Attr("T: {float, double, int32, int64}")
+    .Attr("T: {float, double, int32, int64, complex64}")
     .Doc(R"doc(
 Returns the diagonal part of the tensor.
 
@@ -225,11 +222,149 @@ diagonal: The extracted diagonal.
 )doc");
 
 // --------------------------------------------------------------------------
+REGISTER_OP("BatchMatrixDiag")
+    .Input("diagonal: T")
+    .Output("output: T")
+    .Attr("T: type")
+    .Doc(R"doc(
+Returns a batched diagonal tensor with a given batched diagonal values.
+
+Given a `diagonal`, this operation returns a tensor with the `diagonal` and
+everything else padded with zeros. The diagonal is computed as follows:
+
+Assume `diagonal` has `k` dimensions `[I, J, K, ..., N]`, then the output is a
+tensor of rank `k+1` with dimensions [I, J, K, ..., N, N]` where:
+
+`output[i, j, k, ..., m, n] = 1{m=n} * diagonal[i, j, k, ..., n]`.
+
+For example:
+
+```prettyprint
+# 'diagonal' is [[1, 2, 3, 4], [5, 6, 7, 8]]
+
+and diagonal.shape = (2, 4)
+
+tf.batch_matrix_diag(diagonal) ==> [[[1, 0, 0, 0]
+                                     [0, 2, 0, 0]
+                                     [0, 0, 3, 0]
+                                     [0, 0, 0, 4]],
+                                    [[5, 0, 0, 0]
+                                     [0, 6, 0, 0]
+                                     [0, 0, 7, 0]
+                                     [0, 0, 0, 8]]]
+
+which has shape (2, 4, 4)
+```
+
+diagonal: Rank `k`, where `k >= 1`.
+output: Rank `k+1`, with `output.shape = diagonal.shape + [diagonal.shape[-1]]`.
+)doc");
+
+// --------------------------------------------------------------------------
+REGISTER_OP("BatchMatrixDiagPart")
+    .Input("input: T")
+    .Output("diagonal: T")
+    .Attr("T: type")
+    .Doc(R"doc(
+Returns the batched diagonal part of a batched tensor.
+
+This operation returns a tensor with the `diagonal` part
+of the batched `input`. The `diagonal` part is computed as follows:
+
+Assume `input` has `k` dimensions `[I, J, K, ..., N, N]`, then the output is a
+tensor of rank `k - 1` with dimensions `[I, J, K, ..., N]` where:
+
+`diagonal[i, j, k, ..., n] = input[i, j, k, ..., n, n]`.
+
+The input must be at least a matrix.
+
+For example:
+
+```prettyprint
+# 'input' is [[[1, 0, 0, 0]
+               [0, 2, 0, 0]
+               [0, 0, 3, 0]
+               [0, 0, 0, 4]],
+              [[5, 0, 0, 0]
+               [0, 6, 0, 0]
+               [0, 0, 7, 0]
+               [0, 0, 0, 8]]]
+
+and input.shape = (2, 4, 4)
+
+tf.batch_matrix_diag_part(input) ==> [[1, 2, 3, 4], [5, 6, 7, 8]]
+
+which has shape (2, 4)
+```
+
+input: Rank `k` tensor where `k >= 2` and the last two dimensions are equal.
+diagonal: The extracted diagonal(s) having shape
+  `diagonal.shape = input.shape[:-1]`.
+)doc");
+
+// --------------------------------------------------------------------------
+REGISTER_OP("BatchMatrixBandPart")
+    .Input("input: T")
+    .Input("num_lower: int64")
+    .Input("num_upper: int64")
+    .Output("band: T")
+    .Attr("T: type")
+    .Doc(R"doc(
+Copy a tensor setting everything outside a central band in each innermost matrix
+to zero.
+
+The `band` part is computed as follows:
+Assume `input` has `k` dimensions `[I, J, K, ..., M, N]`, then the output is a
+tensor with the same shape where
+
+`band[i, j, k, ..., m, n] = in_band(m, n) * input[i, j, k, ..., m, n]`.
+
+The indicator function 'in_band(m, n)` is one if
+`(num_lower < 0 || (m-n) <= num_lower)) &&
+(num_upper < 0 || (n-m) <= num_upper)`, and zero otherwise.
+
+For example:
+
+```prettyprint
+# if 'input' is [[ 0,  1,  2, 3]
+                 [-1,  0,  1, 2]
+                 [-2, -1,  0, 1]
+                 [-3, -2, -1, 0]],
+
+tf.batch_matrix_band_part(input, 1, -1) ==> [[ 0,  1,  2, 3]
+                                             [-1,  0,  1, 2]
+                                             [ 0, -1,  0, 1]
+                                             [ 0,  0, -1, 0]],
+
+tf.batch_matrix_band_part(input, 2, 1) ==> [[ 0,  1,  0, 0]
+                                            [-1,  0,  1, 0]
+                                            [-2, -1,  0, 1]
+                                            [ 0, -2, -1, 0]]
+```
+
+Useful special cases:
+
+```prettyprint
+ tf.batch_matrix_band_part(input, 0, -1) ==> Upper triangular part.
+ tf.batch_matrix_band_part(input, -1, 0) ==> Lower triangular part.
+ tf.batch_matrix_band_part(input, 0, 0) ==> Diagonal.
+```
+
+input: Rank `k` tensor.
+num_lower: 0-D tensor. Number of subdiagonals to keep. If negative, keep entire
+           lower triangle.
+num_upper: 0-D tensor. Number of superdiagonals to keep. If negative, keep
+           entire upper triangle.
+band: Rank `k` tensor of the same shape as input. The extracted banded tensor.
+
+)doc");
+
+// --------------------------------------------------------------------------
 REGISTER_OP("Reverse")
     .Input("tensor: T")
     .Input("dims: bool")
     .Output("output: T")
-    .Attr("T: {uint8, int8, int32, bool, float, double}")
+    .Attr("T: {uint8, int8, int32, bool, half, float, double}")
     .Doc(R"Doc(
 Reverses specific dimensions of a tensor.
 
@@ -486,7 +621,7 @@ to pretend that the value was a constant. Some examples include:
 REGISTER_OP("CheckNumerics")
     .Input("tensor: T")
     .Output("output: T")
-    .Attr("T: {float, double}")
+    .Attr("T: {half, float, double}")
     .Attr("message: string")
     .Doc(R"doc(
 Checks a tensor for NaN and Inf values.
@@ -522,14 +657,14 @@ For example:
 ```prettyprint
 # tensor 't' is [1, 2, 3, 4, 5, 6, 7, 8, 9]
 # tensor 't' has shape [9]
-reshape(t, [3, 3]) ==> [[1, 2, 3]
-                        [4, 5, 6]
+reshape(t, [3, 3]) ==> [[1, 2, 3],
+                        [4, 5, 6],
                         [7, 8, 9]]
 
-# tensor 't' is [[[1, 1], [2, 2]]
+# tensor 't' is [[[1, 1], [2, 2]],
 #                [[3, 3], [4, 4]]]
 # tensor 't' has shape [2, 2, 2]
-reshape(t, [2, 4]) ==> [[1, 1, 2, 2]
+reshape(t, [2, 4]) ==> [[1, 1, 2, 2],
                         [3, 3, 4, 4]]
 
 # tensor 't' is [[[1, 1, 1],
@@ -541,9 +676,22 @@ reshape(t, [2, 4]) ==> [[1, 1, 2, 2]
 # tensor 't' has shape [3, 2, 3]
 # pass '[-1]' to flatten 't'
 reshape(t, [-1]) ==> [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6]
-# -1 can also be used with higher dimensional shapes
+
+# -1 can also be used to infer the shape
+
+# -1 is inferred to be 9:
 reshape(t, [2, -1]) ==> [[1, 1, 1, 2, 2, 2, 3, 3, 3],
                          [4, 4, 4, 5, 5, 5, 6, 6, 6]]
+# -1 is inferred to be 2:
+reshape(t, [-1, 9]) ==> [[1, 1, 1, 2, 2, 2, 3, 3, 3],
+                         [4, 4, 4, 5, 5, 5, 6, 6, 6]]
+# -1 is inferred to be 3:
+reshape(t, [ 2, -1, 3]) ==> [[[1, 1, 1],
+                              [2, 2, 2],
+                              [3, 3, 3]],
+                             [[4, 4, 4],
+                              [5, 5, 5],
+                              [6, 6, 6]]]
 
 # tensor 't' is [7]
 # shape `[]` reshapes to a scalar
@@ -554,10 +702,7 @@ shape: Defines the shape of the output tensor.
 )Doc");
 
 // --------------------------------------------------------------------------
-REGISTER_OP("InvertPermutation")
-    .Input("x: int32")
-    .Output("y: int32")
-    .Doc(R"doc(
+REGISTER_OP("InvertPermutation").Input("x: int32").Output("y: int32").Doc(R"doc(
 Computes the inverse permutation of a tensor.
 
 This operation computes the inverse of an index permutation. It takes a 1-D
@@ -855,6 +1000,7 @@ REGISTER_OP("TileGrad")
     .Input("multiples: int32")
     .Output("output: T")
     .Attr("T: type")
+    .Deprecated(3, "TileGrad has been replaced with reduce_sum")
     .Doc(R"doc(
 Returns the gradient of `Tile`.
 
@@ -864,10 +1010,7 @@ each repeated tile of `input` into `output`.
 )doc");
 
 // --------------------------------------------------------------------------
-REGISTER_OP("Where")
-    .Input("input: bool")
-    .Output("index: int64")
-    .Doc(R"doc(
+REGISTER_OP("Where").Input("input: bool").Output("index: int64").Doc(R"doc(
 Returns locations of true values in a boolean tensor.
 
 This operation returns the coordinates of true elements in `input`. The
@@ -1186,6 +1329,207 @@ idx: 1-D. Positions of `x` values preserved in `out`.
 )doc");
 
 // --------------------------------------------------------------------------
+REGISTER_OP("SpaceToBatch")
+    .Input("input: T")
+    .Input("paddings: int32")
+    .Output("output: T")
+    .Attr("T: type")
+    .Attr("block_size: int32 > 1")
+    .Doc(R"doc(
+SpaceToBatch for 4-D tensors of type T.
+
+Zero-pads and then rearranges (permutes) blocks of spatial data into batch.
+More specifically, this op outputs a copy of the input tensor where values from
+the `height` and `width` dimensions are moved to the `batch` dimension. After
+the zero-padding, both `height` and `width` of the input must be divisible by the
+block size.
+
+input: 4-D with shape `[batch, height, width, depth]`.
+
+paddings: 2-D tensor of non-negative integers with shape `[2, 2]`. It specifies
+  the padding of the input with zeros across the spatial dimensions as follows:
+
+      paddings = [[pad_top, pad_bottom], [pad_left, pad_right]]
+
+  The effective spatial dimensions of the zero-padded input tensor will be:
+
+      height_pad = pad_top + height + pad_bottom
+      width_pad = pad_left + width + pad_right
+
+The attr `block_size` must be greater than one. It indicates the block size.
+
+  * Non-overlapping blocks of size `block_size x block size` in the height and
+    width dimensions are rearranged into the batch dimension at each location.
+  * The batch of the output tensor is `batch * block_size * block_size`.
+  * Both height_pad and width_pad must be divisible by block_size.
+
+The shape of the output will be:
+
+    [batch*block_size*block_size, height_pad/block_size, width_pad/block_size,
+     depth]
+
+Examples:
+
+(1) For the following input of shape `[1, 2, 2, 1]` and block_size of 2:
+
+```prettyprint
+x = [[[[1], [2]], [[3], [4]]]]
+```
+
+The output tensor has shape `[4, 1, 1, 1]` and value:
+
+```prettyprint
+[[[[1]]], [[[2]]], [[[3]]], [[[4]]]]
+```
+
+(2) For the following input of shape `[1, 2, 2, 3]` and block_size of 2:
+
+```prettyprint
+x = [[[[1, 2, 3], [4, 5, 6]],
+      [[7, 8, 9], [10, 11, 12]]]]
+```
+
+The output tensor has shape `[4, 1, 1, 3]` and value:
+
+```prettyprint
+[[[1, 2, 3]], [[4, 5, 6]], [[7, 8, 9]], [[10, 11, 12]]]
+```
+
+(3) For the following input of shape `[1, 4, 4, 1]` and block_size of 2:
+
+```prettyprint
+x = [[[[1],   [2],  [3],  [4]],
+      [[5],   [6],  [7],  [8]],
+      [[9],  [10], [11],  [12]],
+      [[13], [14], [15],  [16]]]]
+```
+
+The output tensor has shape `[4, 2, 2, 1]` and value:
+
+```prettyprint
+x = [[[[1], [3]], [[5], [7]]],
+     [[[2], [4]], [[10], [12]]],
+     [[[5], [7]], [[13], [15]]],
+     [[[6], [8]], [[14], [16]]]]
+```
+
+(4) For the following input of shape `[2, 2, 4, 1]` and block_size of 2:
+
+```prettyprint
+x = [[[[1],   [2],  [3],  [4]],
+      [[5],   [6],  [7],  [8]]],
+     [[[9],  [10], [11],  [12]],
+      [[13], [14], [15],  [16]]]]
+```
+
+The output tensor has shape `[8, 1, 2, 1]` and value:
+
+```prettyprint
+x = [[[[1], [3]]], [[[9], [11]]], [[[2], [4]]], [[[10], [12]]],
+     [[[5], [7]]], [[[13], [15]]], [[[6], [8]]], [[[14], [16]]]]
+```
+
+Among others, this operation is useful for reducing atrous convolution into
+regular convolution.
+)doc");
+
+// --------------------------------------------------------------------------
+REGISTER_OP("BatchToSpace")
+    .Input("input: T")
+    .Input("crops: int32")
+    .Output("output: T")
+    .Attr("T: type")
+    .Attr("block_size: int32 > 1")
+    .Doc(R"doc(
+BatchToSpace for 4-D tensors of type T.
+
+Rearranges (permutes) data from batch into blocks of spatial data, followed by
+cropping. This is the reverse transformation of SpaceToBatch. More specifically,
+this op outputs a copy of the input tensor where values from the `batch`
+dimension are moved in spatial blocks to the `height` and `width` dimensions,
+followed by cropping along the `height` and `width` dimensions.
+
+input: 4-D tensor with shape
+ `[batch*block_size*block_size, height_pad/block_size, width_pad/block_size,
+   depth]`. Note that the batch size of the input tensor must be divisible by
+ `block_size * block_size`.
+
+crops: 2-D tensor of non-negative integers with shape `[2, 2]`. It specifies
+  how many elements to crop from the intermediate result across the spatial
+  dimensions as follows:
+
+      crops = [[crop_top, crop_bottom], [crop_left, crop_right]]
+
+output: 4-D with shape `[batch, height, width, depth]`, where:
+
+      height = height_pad - crop_top - crop_bottom
+      width = width_pad - crop_left - crop_right
+
+The attr `block_size` must be greater than one. It indicates the block size.
+
+Examples:
+
+(1) For the following input of shape `[4, 1, 1, 1]` and block_size of 2:
+
+```prettyprint
+[[[[1]]], [[[2]]], [[[3]]], [[[4]]]]
+```
+
+The output tensor has shape `[1, 2, 2, 1]` and value:
+
+```prettyprint
+x = [[[[1], [2]], [[3], [4]]]]
+```
+
+(2) For the following input of shape `[4, 1, 1, 3]` and block_size of 2:
+
+```prettyprint
+[[[1, 2, 3]], [[4, 5, 6]], [[7, 8, 9]], [[10, 11, 12]]]
+```
+
+The output tensor has shape `[1, 2, 2, 3]` and value:
+
+```prettyprint
+x = [[[[1, 2, 3], [4, 5, 6]],
+      [[7, 8, 9], [10, 11, 12]]]]
+```
+
+(3) For the following input of shape `[4, 2, 2, 1]` and block_size of 2:
+
+```prettyprint
+x = [[[[1], [3]], [[5], [7]]],
+     [[[2], [4]], [[10], [12]]],
+     [[[5], [7]], [[13], [15]]],
+     [[[6], [8]], [[14], [16]]]]
+```
+
+The output tensor has shape `[1, 4, 4, 1]` and value:
+
+```prettyprint
+x = [[[1],   [2],  [3],  [4]],
+     [[5],   [6],  [7],  [8]],
+     [[9],  [10], [11],  [12]],
+     [[13], [14], [15],  [16]]]
+```
+
+(4) For the following input of shape `[8, 1, 2, 1]` and block_size of 2:
+
+```prettyprint
+x = [[[[1], [3]]], [[[9], [11]]], [[[2], [4]]], [[[10], [12]]],
+     [[[5], [7]]], [[[13], [15]]], [[[6], [8]]], [[[14], [16]]]]
+```
+
+The output tensor has shape `[2, 2, 4, 1]` and value:
+
+```prettyprint
+x = [[[[1], [3]], [[5], [7]]],
+     [[[2], [4]], [[10], [12]]],
+     [[[5], [7]], [[13], [15]]],
+     [[[6], [8]], [[14], [16]]]]
+```
+)doc");
+
+// --------------------------------------------------------------------------
 REGISTER_OP("SpaceToDepth")
     .Input("input: T")
     .Output("output: T")
@@ -1251,10 +1595,10 @@ This operation, for block_size of 2, will return the following tensor of shape
 Similarly, for the following input of shape `[1 4 4 1]`, and a block size of 2:
 
 ```prettyprint
-x = [[ [1],   [2],  [5],  [6]],
-     [ [3],   [4],  [7],  [8]],
-     [ [9],  [10], [13],  [14]],
-     [ [11], [12], [15],  [16]]]
+x = [[[[1],   [2],  [5],  [6]],
+      [[3],   [4],  [7],  [8]],
+      [[9],  [10], [13],  [14]],
+      [[11], [12], [15],  [16]]]]
 ```
 
 the operator will return the following tensor of shape `[1 2 2 4]`:
@@ -1360,6 +1704,42 @@ x = [[ [1],   [2],  [5],  [6]],
 block_size: The size of the spatial block, same as in Space2Depth.
 )doc");
 
+// --------------------------------------------------------------------------
+
+REGISTER_OP("ExtractImagePatches")
+    .Input("images: T")
+    .Output("patches: T")
+    .Attr("ksizes: list(int) == 4")
+    .Attr("strides: list(int) == 4")
+    .Attr("rates: list(int) == 4")
+    .Attr("T: realnumbertype")
+    .Attr(GetPaddingAttrString())
+    .Doc(R"doc(
+Extract `patches` from `images` and puth them in the "depth" output dimension.
+
+images: 4-D Tensor with shape `[batch, in_rows, in_cols, depth]`.
+patches: 4-D Tensor with shape `[batch, out_rows, out_cols, ksize_rows *
+  ksize_cols * depth]` containing image patches with size
+  `ksize_rows x ksize_cols x depth` vectorized in the "depth" dimension.
+ksizes: The size of the sliding window for each dimension of `images`.
+strides: 1-D of length 4. How far the centers of two consecutive patches are in
+  the images. Must be: `[1, stride_rows, stride_cols, 1]`.
+rates: 1-D of length 4. Must be: `[1, rate_rows, rate_cols, 1]`. This is the
+  input stride, specifying how far two consecutive patch samples are in the
+  input. Equivalent to extracting patches with
+  `patch_sizes_eff = patch_sizes + (patch_sizes - 1) * (rates - 1), followed by
+  subsampling them spatially by a factor of `rates`.
+padding: The type of padding algorithm to use.
+
+We specify the size-related attributes as:
+
+      ksizes = [1, ksize_rows, ksize_cols, 1]
+      strides = [1, strides_rows, strides_cols, 1]
+      rates = [1, rates_rows, rates_cols, 1]
+)doc");
+
+// --------------------------------------------------------------------------
+
 REGISTER_OP("Bitcast")
     .Input("input: T")
     .Output("output: type")
@@ -1377,16 +1757,20 @@ shape changes from [...] to [..., sizeof(`T`)/sizeof(`type`)].
 If `T` is smaller than `type`, the operator requires that the rightmost
 dimension be equal to sizeof(`type`)/sizeof(`T`). The shape then goes from
 [..., sizeof(`type`)/sizeof(`T`)] to [...].
+
+NOTE: Bitcast is implemented as a low-level cast, so machines with different
+endian orderings will give different results.
 )doc");
 
 REGISTER_OP("OneHot")
-    .Input("indices: int64")
+    .Input("indices: TI")
     .Input("depth: int32")
     .Input("on_value: T")
     .Input("off_value: T")
     .Attr("axis: int = -1")
     .Output("output: T")
     .Attr("T: type")
+    .Attr("TI: {int32, int64} = DT_INT64")
     .Doc(R"doc(
 Returns a one-hot tensor.
 
@@ -1485,6 +1869,77 @@ on_value: A scalar defining the value to fill in output when `indices[j] = i`.
 off_value: A scalar defining the value to fill in output when `indices[j] != i`.
 axis: The axis to fill (default: -1, a new inner-most axis).
 output: The one-hot tensor.
+)doc");
+
+// EXPERIMENTAL. DO NOT USE OR DEPEND ON THIS YET.
+REGISTER_OP("_QuantizeAndDequantize")
+    .Input("input: T")
+    .Attr("signed_input: bool = true")
+    .Attr("num_bits: int32 = 8")
+    .Attr("range_given: bool = false")
+    .Attr("input_min: float = 0")
+    .Attr("input_max: float = 0")
+    .Output("output: T")
+    .Attr("T: {float, double}")
+    .Doc(R"doc(
+Quantizes then dequantizes a tensor.
+
+This op simulates the precision loss from the quantized forward pass by:
+1. Quantizing the tensor to fixed point numbers, which should match the target
+   quantization method when it is used in inference.
+2. Dequantizing it back to floating point numbers for the following ops, most
+   likely matmul.
+
+There are different ways to quantize. This version does not use the full range
+of the output type, choosing to elide the lowest possible value for symmetry
+(e.g., output range is -127 to 127, not -128 to 127 for signed 8 bit
+quantization), so that 0.0 maps to 0.
+
+To perform this op, we first find the range of values in our tensor. The range
+we use is always centered on 0, so we find m such that
+
+1. m = max(abs(input_min), abs(input_max)) if range_given is true,
+2. m = max(max(abs(min_elem(input)), abs(max_elem(input))) otherwise.
+
+Our input tensor range is then [-m, m].
+
+Next, we choose our fixed-point quantization buckets, [min_fixed, max_fixed].
+If signed_input is true, this is
+
+  [min_fixed, max_fixed ] =
+      [-(1 << (num_bits - 1) - 1), (1 << (num_bits - 1)) - 1].
+
+Otherwise, if signed_input is false, the fixed-point range is
+
+  [min_fixed, max_fixed] = [0, (1 << num_bits) - 1].
+
+From this we compute our scaling factor, s:
+
+  s = (max_fixed - min_fixed) / (2 * m).
+
+Now we can quantize and dequantize the elements of our tensor.  An element e
+is transformed into e':
+
+  e' = (e * s).round_to_nearest() / s.
+
+Note that we have a different number of buckets in the signed vs. unsigned
+cases.  For example, if num_bits == 8, we get 254 buckets in the signed case
+vs. 255 in the unsigned case.
+
+For example, suppose num_bits = 8 and m = 1.  Then
+
+  [min_fixed, max_fixed] = [-127, 127], and
+  s = (127 + 127) / 2 = 127.
+
+Given the vector {-1, -0.5, 0, 0.3}, this is quantized to
+{-127, -63, 0, 38}, and dequantized to {-1, -63.0/127, 0, 38.0/127}.
+
+input: Tensor to quantize and then dequantize.
+signed_input: If the quantization is signed or unsigned.
+num_bits: The bitwidth of the quantization.
+range_given: If the range is given or should be computed from the tensor.
+input_min: If range is given, this is the min of the range.
+input_max: If range is given, this is the max of the range.
 )doc");
 
 }  // namespace tensorflow

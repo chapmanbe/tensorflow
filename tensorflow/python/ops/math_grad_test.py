@@ -1,4 +1,4 @@
-# Copyright 2016 Google Inc. All Rights Reserved.
+# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ class AbsOpTest(tf.test.TestCase):
 
   def _testGrad(self, shape, dtype=None, max_error=None, bias=None, sigma=None):
     np.random.seed(7)
-    if dtype == tf.complex64:
+    if dtype in (tf.complex64, tf.complex128):
       value = tf.complex(self._biasedRandN(shape, bias=bias, sigma=sigma),
                          self._biasedRandN(shape, bias=bias, sigma=sigma))
     else:
@@ -74,7 +74,7 @@ class AbsOpTest(tf.test.TestCase):
 
     for use_gpu in [True, False]:
       with self.test_session(use_gpu=use_gpu):
-        if dtype == tf.complex64:
+        if dtype in (tf.complex64, tf.complex128):
           output = tf.complex_abs(value)
         else:
           output = tf.abs(value)
@@ -94,6 +94,60 @@ class AbsOpTest(tf.test.TestCase):
                    sigma=0.1)
     self._testGrad([3, 3], dtype=tf.complex64, max_error=100.0, bias=0.0,
                    sigma=0.1)
+
+
+class MinOrMaxGradientTest(tf.test.TestCase):
+
+  def testMinGradient(self):
+    inputs = tf.constant([1.0], dtype=tf.float32)
+    outputs = tf.reduce_min(tf.concat(0, [inputs, inputs]))
+    with self.test_session():
+      error = tf.test.compute_gradient_error(inputs, [1], outputs, [])
+      self.assertLess(error, 1e-4)
+
+  def testMaxGradient(self):
+    inputs = tf.constant([1.0], dtype=tf.float32)
+    outputs = tf.reduce_max(tf.concat(0, [inputs, inputs]))
+    with self.test_session():
+      error = tf.test.compute_gradient_error(inputs, [1], outputs, [])
+      self.assertLess(error, 1e-4)
+
+
+class SegmentMinOrMaxGradientTest(tf.test.TestCase):
+
+  def testSegmentMinGradient(self):
+    data = tf.constant([1.0, 2.0, 3.0], dtype=tf.float32)
+    segment_ids = tf.constant([0, 0, 1], dtype=tf.int64)
+    segment_min = tf.segment_min(data, segment_ids)
+    with self.test_session():
+      error = tf.test.compute_gradient_error(data, [3], segment_min, [2])
+      self.assertLess(error, 1e-4)
+
+  def testSegmentMaxGradient(self):
+    data = tf.constant([1.0, 2.0, 3.0], dtype=tf.float32)
+    segment_ids = tf.constant([0, 0, 1], dtype=tf.int64)
+    segment_max = tf.segment_max(data, segment_ids)
+    with self.test_session():
+      error = tf.test.compute_gradient_error(data, [3], segment_max, [2])
+      self.assertLess(error, 1e-4)
+
+  def testSegmentMinGradientWithTies(self):
+    inputs = tf.constant([1.0], dtype=tf.float32)
+    data = tf.concat(0, [inputs, inputs])
+    segment_ids = tf.constant([0, 0], dtype=tf.int64)
+    segment_min = tf.segment_min(data, segment_ids)
+    with self.test_session():
+      error = tf.test.compute_gradient_error(inputs, [1], segment_min, [1])
+      self.assertLess(error, 1e-4)
+
+  def testSegmentMaxGradientWithTies(self):
+    inputs = tf.constant([1.0], dtype=tf.float32)
+    data = tf.concat(0, [inputs, inputs])
+    segment_ids = tf.constant([0, 0], dtype=tf.int64)
+    segment_max = tf.segment_max(data, segment_ids)
+    with self.test_session():
+      error = tf.test.compute_gradient_error(inputs, [1], segment_max, [1])
+      self.assertLess(error, 1e-4)
 
 
 if __name__ == "__main__":

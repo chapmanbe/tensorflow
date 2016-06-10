@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -538,6 +538,18 @@ OpDefBuilder& OpDefBuilder::SetIsStateful() {
 
 OpDefBuilder& OpDefBuilder::SetAllowsUninitializedInput() {
   op_def_.set_allows_uninitialized_input(true);
+  return *this;
+}
+
+OpDefBuilder& OpDefBuilder::Deprecated(int version, StringPiece explanation) {
+  if (op_def_.has_deprecation()) {
+    errors_.push_back(
+        strings::StrCat("Deprecated called twice for Op ", op_def_.name()));
+  } else {
+    OpDeprecation* deprecation = op_def_.mutable_deprecation();
+    deprecation->set_version(version);
+    deprecation->set_explanation(explanation.ToString());
+  }
   return *this;
 }
 

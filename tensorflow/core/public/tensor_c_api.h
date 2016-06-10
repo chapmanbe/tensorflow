@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -90,6 +90,7 @@ typedef enum {
   TF_QUINT16 = 16,   // Quantized uint16
   TF_UINT16 = 17,
   TF_COMPLEX128 = 18,  // Double-precision complex
+  TF_HALF = 19,
 } TF_DataType;
 
 // --------------------------------------------------------------------------

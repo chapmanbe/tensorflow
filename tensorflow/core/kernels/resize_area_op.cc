@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -103,8 +103,8 @@ class ResizeAreaOp : public OpKernel {
                   j < in_x ? j + 1 - in_x : (j + 1 > in_x1 ? in_x1 - j : 1.0);
               for (int64 c = 0; c < st.channels; ++c) {
 #define BOUND(val, limit) std::min(((limit)-1ll), (std::max(0ll, (val))))
-                sum_data(c) += input_data(b, BOUND(i, st.in_height),
-                                          BOUND(j, st.in_width), c) *
+                sum_data(c) += float(input_data(b, BOUND(i, st.in_height),
+                                                BOUND(j, st.in_width), c)) *
                                scale_y * scale_x * scale;
 #undef BOUND
               }

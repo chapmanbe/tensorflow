@@ -1,4 +1,4 @@
-/* Copyright 2016 Google Inc. All Rights Reserved.
+/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,7 +29,10 @@ DataByExample::~DataByExample() {}
 
 // static
 DataByExample::Key DataByExample::MakeKey(const string& example_id) {
-  // Platform agnostic and collision resistant key-generation function.
+  // Colision resistant key-generation function. It is safe to use a Hash
+  // function (as opposed to a Fingerprint) since the usage of the resource is
+  // single machine and the Keys are never persisted anywhere.
+  //
   // The current probability of at least one collision for 1B example_ids is
   // approximately 10^-11 (ie 2^60 / 2^97).
   //

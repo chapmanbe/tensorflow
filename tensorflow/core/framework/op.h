@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -209,6 +209,10 @@ class OpDefBuilderWrapper<true> {
     builder_.SetAllowsUninitializedInput();
     return *this;
   }
+  OpDefBuilderWrapper<true>& Deprecated(int version, StringPiece explanation) {
+    builder_.Deprecated(version, explanation);
+    return *this;
+  }
   OpDefBuilderWrapper<true>& Doc(StringPiece text) {
     builder_.Doc(text);
     return *this;
@@ -231,6 +235,7 @@ class OpDefBuilderWrapper<false> {
   OpDefBuilderWrapper<false>& SetIsAggregate() { return *this; }
   OpDefBuilderWrapper<false>& SetIsStateful() { return *this; }
   OpDefBuilderWrapper<false>& SetAllowsUninitializedInput() { return *this; }
+  OpDefBuilderWrapper<false>& Deprecated(int, StringPiece) { return *this; }
   OpDefBuilderWrapper<false>& Doc(StringPiece text) { return *this; }
 };
 

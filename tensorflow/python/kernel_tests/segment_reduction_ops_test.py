@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -70,7 +70,9 @@ class SegmentReductionOpTest(SegmentReductionHelper):
     dtypes = [tf.float32,
               tf.float64,
               tf.int64,
-              tf.int32]
+              tf.int32,
+              tf.complex64,
+              tf.complex128]
 
     # Each item is np_op1, np_op2, tf_op
     ops_list = [(np.add, None, tf.segment_sum),
@@ -79,14 +81,23 @@ class SegmentReductionOpTest(SegmentReductionHelper):
                 (np.ndarray.__mul__, None, tf.segment_prod),
                 (np.minimum, None, tf.segment_min),
                 (np.maximum, None, tf.segment_max)]
+    
+    # A subset of ops has been enabled for complex numbers
+    complex_ops_list = [(np.add, None, tf.segment_sum),
+                        (np.ndarray.__mul__, None, tf.segment_prod)]
 
     n = 10
     shape = [n, 2]
     indices = [i // 3 for i in range(n)]
     for dtype in dtypes:
+      if dtype in (tf.complex64, tf.complex128):
+          curr_ops_list = complex_ops_list
+      else:
+          curr_ops_list = ops_list
+
       with self.test_session(use_gpu=False):
         tf_x, np_x = self._input(shape, dtype=dtype)
-        for np_op1, np_op2, tf_op in ops_list:
+        for np_op1, np_op2, tf_op in curr_ops_list:
           np_ans = self._segmentReduce(indices, np_x, np_op1, np_op2)
           s = tf_op(data=tf_x, segment_ids=indices)
           tf_ans = s.eval()
@@ -169,6 +180,24 @@ class SegmentReductionOpTest(SegmentReductionHelper):
           "because 'segment_ids' input is not sorted."):
         s.eval()
 
+  def testSegmentIdsInvalid6(self):
+    shape = [4, 4]
+    with self.test_session():
+      tf_x, _ = self._input(shape)
+      indices = [0, 0, 0, -1]
+      s = tf.segment_sum(data=tf_x, segment_ids=indices)
+      with self.assertRaisesOpError("segment ids must be >= 0"):
+        s.eval()
+
+  def testSegmentIdsInvalid7(self):
+    shape = [4, 4]
+    with self.test_session():
+      tf_x, _ = self._input(shape)
+      indices = [0, 0, 0, -2]
+      s = tf.segment_sum(data=tf_x, segment_ids=indices)
+      with self.assertRaisesOpError("segment ids must be >= 0"):
+        s.eval()
+
   def testGradient(self):
     shape = [4, 4]
     indices = [0, 1, 2, 2]
@@ -195,7 +224,9 @@ class UnsortedSegmentSumTest(SegmentReductionHelper):
     dtypes = [tf.float32,
               tf.float64,
               tf.int64,
-              tf.int32]
+              tf.int32,
+              tf.complex64,
+              tf.complex128]
     indices_flat = np.array([0, 4, 0, 8, 3, 8, 4, 7, 7, 3])
     num_segments = 12
     for indices in indices_flat, indices_flat.reshape(5, 2):
@@ -428,6 +459,28 @@ class SparseSegmentReductionOpTest(SparseSegmentReductionHelper):
         with self.assertRaisesOpError("segment ids do not start at 0"):
           s.eval()
 
+  def testSegmentsInvalid6(self):
+    tf_x, _ = self._input([10, 4], dtype=tf.float32)
+    ops_list = [tf.sparse_segment_sum, tf.sparse_segment_mean]
+    segment_indices = [0, 0, 0, -1]
+    tf_indices = [8, 3, 0, 9]
+    with self.test_session(use_gpu=False):
+      for tf_op in ops_list:
+        s = tf_op(data=tf_x, indices=tf_indices, segment_ids=segment_indices)
+        with self.assertRaisesOpError("segment ids must be >= 0"):
+          s.eval()
+
+  def testSegmentsInvalid7(self):
+    tf_x, _ = self._input([10, 4], dtype=tf.float32)
+    ops_list = [tf.sparse_segment_sum, tf.sparse_segment_mean]
+    segment_indices = [0, 0, 0, -2]
+    tf_indices = [8, 3, 0, 9]
+    with self.test_session(use_gpu=False):
+      for tf_op in ops_list:
+        s = tf_op(data=tf_x, indices=tf_indices, segment_ids=segment_indices)
+        with self.assertRaisesOpError("segment ids must be >= 0"):
+          s.eval()
+
   def testGradient(self):
     shape = [10, 4]
 
@@ -511,6 +564,17 @@ class SparseSegmentReductionOpTest(SparseSegmentReductionHelper):
       for tf_op in ops_list:
         s = tf_op(tf_x, tf_indices, segment_indices, 10)
         with self.assertRaisesOpError(r"Segment id -1 out of range \[0, 2\)"):
+          s.eval()
+
+  def testGradientSegmentsInvalid4(self):
+    tf_x, _ = self._input([0, 4], dtype=tf.float32)
+    ops_list = [tf.sparse_segment_mean_grad, tf.sparse_segment_sqrt_n_grad]
+    segment_indices = [0, 1, 2, -1]
+    tf_indices = [8, 3, 0, 9]
+    with self.test_session(use_gpu=False):
+      for tf_op in ops_list:
+        s = tf_op(tf_x, tf_indices, segment_indices, 10)
+        with self.assertRaisesOpError(r"Segment id 0 out of range \[0, 0\)"):
           s.eval()
 
 

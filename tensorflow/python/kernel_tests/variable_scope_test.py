@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -99,6 +99,37 @@ class VariableStoreTest(tf.test.TestCase):
 
         v_tower = tf.get_variable("v", [])
         self.assertFalse(v_tower.value().device.startswith(caching_device))
+
+  def testVarScopeCachedWithCaller(self):
+    with self.test_session():
+      device_fn = lambda x: "/job:ps"
+      with tf.variable_scope("tower"):
+        with tf.variable_scope("caching", caching_device=""):
+          with tf.device(device_fn):
+            v = tf.get_variable("v", [])
+          self.assertDeviceEqual(v.device, "/job:ps/CPU:0")
+          self.assertDeviceEqual(v.value().device, "")
+          self.assertDeviceEqual(v.initialized_value().device, "CPU:0")
+
+  def testVarScopeDeviceFn(self):
+    with self.test_session():
+      device_fn = lambda x: "/job:ps" if x.node_def.op == "Variable" else ""
+      with tf.device(device_fn):
+        v = tf.get_variable("v", [])
+        self.assertDeviceEqual(v.device, "/job:ps/CPU:0")
+        self.assertDeviceEqual(v.value().device, v.device)
+        self.assertDeviceEqual(v.initialized_value().device, v.device)
+
+  def testVarScopeCachingDeviceSet(self):
+    with self.test_session():
+      device_fn = lambda x: "/job:ps" if x.node_def.op == "Variable" else ""
+      with tf.variable_scope("RNN") as varscope:
+        varscope.set_caching_device(lambda op: op.device)
+        with tf.device(device_fn):
+          v = tf.get_variable("v", [])
+        self.assertDeviceEqual(v.device, "/job:ps/CPU:0")
+        self.assertDeviceEqual(v.value().device, "")
+        self.assertDeviceEqual(v.initialized_value().device, "CPU:0")
 
   def testVarScopeRegularizer(self):
     with self.test_session() as sess:
@@ -271,6 +302,33 @@ class VariableStoreTest(tf.test.TestCase):
         with tf.variable_scope(root_var_scope):
           with tf.name_scope("scope2") as sc2:
             self.assertEqual(sc2, "scope4/scope2/")
+
+  def testVarScopeObjectReuse(self):
+    with self.test_session():
+      vs = None
+      with tf.variable_scope("jump", reuse=True) as scope:
+        vs = scope
+
+      with tf.variable_scope(vs) as jump:
+        self.assertTrue(jump.reuse)
+
+      with tf.variable_scope(vs, reuse=True) as jump_reuse:
+        self.assertTrue(jump_reuse.reuse)
+
+      with tf.variable_scope(vs, reuse=False) as jump_no_reuse:
+        self.assertFalse(jump_no_reuse.reuse)
+
+      with tf.variable_scope("jump", reuse=False) as scope:
+        vs = scope
+
+      with tf.variable_scope(vs) as jump:
+        self.assertFalse(jump.reuse)
+
+      with tf.variable_scope(vs, reuse=True) as jump_reuse:
+        self.assertTrue(jump_reuse.reuse)
+
+      with tf.variable_scope(vs, reuse=False) as jump_no_reuse:
+        self.assertFalse(jump_no_reuse.reuse)
 
   def testVarOpScope(self):
     with self.test_session():
@@ -506,6 +564,98 @@ class VariableStoreTest(tf.test.TestCase):
                            "outer/default/w:0")
           with tf.name_scope("scope2") as sc2:
             self.assertEqual(sc2, "outer_1/default/scope2/")
+
+
+def axis0_into1_partitioner(shape=None, **unused_kwargs):
+  part = [1] * len(shape)
+  return part
+
+
+def axis0_into2_partitioner(shape=None, **unused_kwargs):
+  part = [1] * len(shape)
+  part[0] = 2
+  return part
+
+
+def axis0_into3_partitioner(shape=None, **unused_kwargs):
+  part = [1] * len(shape)
+  part[0] = 3
+  return part
+
+
+class VariableScopeWithPartitioningTest(tf.test.TestCase):
+
+  def testResultNameMatchesRequested(self):
+    with tf.variable_scope("scope0", partitioner=axis0_into2_partitioner):
+      v = tf.get_variable("name0", shape=(3, 1, 1))
+      self.assertEqual(v.name, "scope0/name0")
+      v_concat = v.as_tensor()
+      self.assertEqual(v_concat.name, "scope0/name0:0")
+      variables = tf.get_collection(tf.GraphKeys.VARIABLES)
+      self.assertTrue("scope0/name0/part_0:0" in [x.name for x in variables])
+      self.assertTrue("scope0/name0/part_1:0" in [x.name for x in variables])
+      self.assertFalse("scope0/name0/part_2:0" in [x.name for x in variables])
+
+  def testBreaksIfPartitioningChanges(self):
+    with tf.variable_scope("scope0", partitioner=axis0_into2_partitioner):
+      tf.get_variable("name0", shape=(3, 1, 1))
+
+    with tf.variable_scope("scope0",
+                           partitioner=axis0_into3_partitioner,
+                           reuse=True):
+      with self.assertRaisesRegexp(
+          ValueError,
+          "Trying to reuse partitioned variable .* but specified partitions .* "
+          "and found partitions .*"):
+        tf.get_variable("name0", shape=(3, 1, 1))
+
+    with tf.variable_scope("scope0",
+                           partitioner=axis0_into1_partitioner,
+                           reuse=True):
+      with self.assertRaisesRegexp(
+          ValueError,
+          "Trying to reuse partitioned variable .* but specified partitions .* "
+          "and found partitions .*"):
+        tf.get_variable("name0", shape=(3, 1, 1))
+
+  def testReturnsExistingConcatenatedValueIfReuse(self):
+    with tf.variable_scope("scope0", partitioner=axis0_into2_partitioner):
+      v_concat = tf.get_variable("name0", shape=(3, 1, 1))
+      tf.get_variable_scope().reuse_variables()
+      v_concat_2 = tf.get_variable("name0", shape=(3, 1, 1))
+      self.assertEqual(v_concat, v_concat_2)
+
+  def testAllowsReuseWithoutPartitioner(self):
+    with tf.variable_scope("scope0", partitioner=axis0_into2_partitioner):
+      v = tf.get_variable("name0", shape=(3, 1, 1))
+    with tf.variable_scope("scope0", reuse=True):
+      v_reused = tf.get_variable("name0")
+
+    self.assertEqual(v, v_reused)
+
+  def testPartitionConcatenatesAlongCorrectAxis(self):
+    def _part_axis_0(**unused_kwargs):
+      return (2, 1, 1)
+
+    def _part_axis_1(**unused_kwargs):
+      return (1, 2, 1)
+
+    with tf.variable_scope("root"):
+      v0 = tf.get_variable("n0", shape=(2, 2, 2), partitioner=_part_axis_0)
+      v1 = tf.get_variable("n1", shape=(2, 2, 2), partitioner=_part_axis_1)
+
+    self.assertEqual(v0.get_shape(), (2, 2, 2))
+    self.assertEqual(v1.get_shape(), (2, 2, 2))
+
+    n0_0 = tf.get_default_graph().get_tensor_by_name("root/n0/part_0:0")
+    n0_1 = tf.get_default_graph().get_tensor_by_name("root/n0/part_1:0")
+    self.assertEqual(n0_0.get_shape(), (1, 2, 2))
+    self.assertEqual(n0_1.get_shape(), (1, 2, 2))
+
+    n1_0 = tf.get_default_graph().get_tensor_by_name("root/n1/part_0:0")
+    n1_1 = tf.get_default_graph().get_tensor_by_name("root/n1/part_1:0")
+    self.assertEqual(n1_0.get_shape(), (2, 1, 2))
+    self.assertEqual(n1_1.get_shape(), (2, 1, 2))
 
 if __name__ == "__main__":
   tf.test.main()

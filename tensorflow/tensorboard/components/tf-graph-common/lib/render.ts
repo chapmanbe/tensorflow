@@ -1,13 +1,13 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
+Licensed under the Apache License, Version 2.0 (the 'License');
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
     http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
+distributed under the License is distributed on an 'AS IS' BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
@@ -22,10 +22,7 @@ export type Point = {x: number, y: number};
 /**
  * Color parameters for op nodes.
  */
-export let OpNodeColors = {
-  DEFAULT_FILL: "white",
-  DEFAULT_STROKE: "#b2b2b2"
-};
+export let OpNodeColors = {DEFAULT_FILL: 'white', DEFAULT_STROKE: '#b2b2b2'};
 
 /**
  * Color parameters for node encoding.
@@ -35,15 +32,15 @@ export let MetanodeColors = {
   /**
    * Default fill and stroke to use when no other information is available.
    */
-  DEFAULT_FILL: "#d9d9d9",
-  DEFAULT_STROKE: "#a6a6a6",
+  DEFAULT_FILL: '#d9d9d9',
+  DEFAULT_STROKE: '#a6a6a6',
   SATURATION: 0.6,
   LIGHTNESS: 0.85,
   /**
    * Neutral color to use when the node is expanded (used when coloring by
    * compute time, memory and device).
    */
-  EXPANDED_COLOR: "#f0f0f0",
+  EXPANDED_COLOR: '#f0f0f0',
   /**
    * Standard hue values for node color palette.
    */
@@ -59,32 +56,19 @@ export let MetanodeColors = {
     let light = lightened ? 95 : 80;
     return d3.hsl(hue, .01 * sat, .01 * light).toString();
   },
-  DEVICE_PALETTE: function (index: number): string {
-    return MetanodeColors.STRUCTURE_PALETTE(index);
-  },
-  UNKNOWN: "#eee",
-  GRADIENT_OUTLINE: "#888"
+  DEVICE_PALETTE: function(index: number):
+      string { return MetanodeColors.STRUCTURE_PALETTE(index);},
+  UNKNOWN: '#eee',
+  GRADIENT_OUTLINE: '#888'
 };
 
 /**
  * Color parameters for op nodes.
  */
 export let SeriesNodeColors = {
-  DEFAULT_FILL: "white",
-  DEFAULT_STROKE: "#b2b2b2"
+  DEFAULT_FILL: 'white',
+  DEFAULT_STROKE: '#b2b2b2'
 };
-
-/** The minimum stroke width of an edge. */
-const MIN_EDGE_WIDTH = 0.75;
-
-/** The maximum stroke width of an edge. */
-const MAX_EDGE_WIDTH = 12;
-
-/** The exponent used in the power scale for edge thickness. */
-const EDGE_WIDTH_SCALE_EXPONENT = 0.3;
-
-/** The domain (min and max value) for the edge width. */
-const DOMAIN_EDGE_WIDTH_SCALE = [1, 5E6];
 
 /**
  * Parameters that affect how the graph is rendered on the screen.
@@ -114,16 +98,14 @@ const PARAMS = {
    * sink-like nodes that will be extracted from the main graph.
    */
   outExtractTypes: [
-    "NoOp" // NoOps are sink-like used for managing control dependencies.
+    'NoOp'  // NoOps are sink-like used for managing control dependencies.
   ],
 
   /**
    * Types patterns for predefined in-extract nodes, which are
    * source-like nodes that will be extracted from the main graph.
    */
-  inExtractTypes: [
-    "Variable"
-  ],
+  inExtractTypes: ['Variable'],
 
   /**
    * When removing edges from a high degree node, remove all of its edges if
@@ -150,7 +132,7 @@ const PARAMS = {
    * 2 colors, for the minimum and maximum value respectively, whenever we
    * have a gradient scale.
    */
-  minMaxColors: ["#fff5f0", "#fb6a4a"],
+  minMaxColors: ['#fff5f0', '#fb6a4a'],
 
   /**
    * Maximum number of annotations to be displayed on a node before an
@@ -164,12 +146,15 @@ const PARAMS = {
  * for each node in the graph.
  */
 export class RenderGraphInfo {
-  private hierarchy: hierarchy.Hierarchy;
+  hierarchy: hierarchy.Hierarchy;
+  private displayingStats: boolean;
   private index: {[nodeName: string]: RenderNodeInfo};
   private deviceColorMap: d3.scale.Ordinal<string, string>;
   private memoryUsageScale: d3.scale.Linear<string, string>;
   private computeTimeScale: d3.scale.Linear<string, string>;
-  edgeWidthScale: d3.scale.Pow<number, number>;
+  /** Scale for the thickness of edges when there is no shape information. */
+  edgeWidthScale:
+      d3.scale.Linear<number, number> | d3.scale.Pow<number, number>;
   // Since the rendering information for each node is constructed lazily,
   // upon node's expansion by the user, we keep a map between the node's name
   // and whether the rendering information was already constructed for that
@@ -177,21 +162,28 @@ export class RenderGraphInfo {
   private hasSubhierarchy: {[nodeName: string]: boolean};
   root: RenderGroupNodeInfo;
 
-  constructor(hierarchy: hierarchy.Hierarchy) {
+  constructor(hierarchy: hierarchy.Hierarchy, displayingStats: boolean) {
     this.hierarchy = hierarchy;
+    this.displayingStats = displayingStats;
     this.index = {};
+
+    this.computeScales();
+    // Maps node name to whether the rendering hierarchy was already
+    // constructed.
+    this.hasSubhierarchy = {};
+    this.root = new RenderGroupNodeInfo(hierarchy.root);
+    this.index[hierarchy.root.name] = this.root;
+    this.buildSubhierarchy(hierarchy.root.name);
+    this.root.expanded = true;
+  }
+
+  computeScales() {
     this.deviceColorMap = d3.scale.ordinal<string>()
-        .domain(hierarchy.devices)
-        .range(_.map(d3.range(hierarchy.devices.length),
+        .domain(this.hierarchy.devices)
+        .range(_.map(d3.range(this.hierarchy.devices.length),
                      MetanodeColors.DEVICE_PALETTE));
 
-    this.edgeWidthScale = d3.scale.pow()
-      .exponent(EDGE_WIDTH_SCALE_EXPONENT)
-      .domain(DOMAIN_EDGE_WIDTH_SCALE)
-      .range([MIN_EDGE_WIDTH, MAX_EDGE_WIDTH])
-      .clamp(true);
-
-    let topLevelGraph = hierarchy.root.metagraph;
+    let topLevelGraph = this.hierarchy.root.metagraph;
     // Find the maximum and minimum memory usage.
     let memoryExtent = d3.extent(topLevelGraph.nodes(),
         (nodeName, index) => {
@@ -218,13 +210,11 @@ export class RenderGraphInfo {
         .domain(computeTimeExtent)
         .range(PARAMS.minMaxColors);
 
-    // Maps node name to whether the rendering hierarchy was already
-    // constructed.
-    this.hasSubhierarchy = {};
-    this.root = new RenderGroupNodeInfo(hierarchy.root);
-    this.index[hierarchy.root.name] = this.root;
-    this.buildSubhierarchy(hierarchy.root.name);
-    this.root.expanded = true;
+    this.edgeWidthScale = this.hierarchy.hasShapeInfo ?
+      scene.edge.EDGE_WIDTH_SCALE :
+      d3.scale.linear()
+        .domain([1, this.hierarchy.maxMetaEdgeSize])
+        .range([scene.edge.MIN_EDGE_WIDTH, scene.edge.MAX_EDGE_WIDTH]);
   }
 
   /**
@@ -272,6 +262,10 @@ export class RenderGraphInfo {
       renderInfo.computeTimeColor =
         this.computeTimeScale(node.stats.totalMicros);
     }
+
+    // We only fade nodes when we're displaying stats.
+    renderInfo.isFadedOut = this.displayingStats &&
+        !tf.graph.util.hasDisplayableNodeStats(node.stats);
 
     if (node.isGroupNode) {
       // Make a list of tuples (device, proportion), where proportion
@@ -393,6 +387,8 @@ export class RenderGraphInfo {
     _.each(metagraph.edges(), edgeObj => {
       let metaedge = metagraph.edge(edgeObj);
       let renderMetaedgeInfo = new RenderMetaedgeInfo(metaedge);
+      renderMetaedgeInfo.isFadedOut =
+          this.index[edgeObj.v].isFadedOut || this.index[edgeObj.w].isFadedOut;
       coreGraph.setEdge(edgeObj.v, edgeObj.w, renderMetaedgeInfo);
     });
 
@@ -415,7 +411,7 @@ export class RenderGraphInfo {
 
     // Utility function for computing the name of a bridge node.
     let getBridgeNodeName = (inbound, ...rest) =>
-      rest.concat([inbound ? "IN" : "OUT"]).join("~~");
+        rest.concat([inbound ? 'IN' : 'OUT']).join('~~');
 
     // Build out the bridgegraph.
     let bridgegraph = this.hierarchy.getBridgegraph(nodeName);
@@ -521,7 +517,7 @@ export class RenderGraphInfo {
       }
 
       // Although dataflow edges are acyclic, control dependency edges may
-      // actually point "backwards" in the graph. If this bridgeMetaedge is
+      // actually point 'backwards' in the graph. If this bridgeMetaedge is
       // a control dependency, we need to determine whether it's backwards
       // pointing so that we render it appropriately.
       //
@@ -735,7 +731,7 @@ export class RenderGraphInfo {
         // in that case, something about the graph upsets dagre.layout()'s
         // longestPath algorithm (was getting errors due to an undefined).
         let structuralNodeName =
-          getBridgeNodeName(inbound, nodeName, "STRUCTURAL_TARGET");
+            getBridgeNodeName(inbound, nodeName, 'STRUCTURAL_TARGET');
         let structuralRenderInfo = coreGraph.node(structuralNodeName);
         if (!structuralRenderInfo) {
           let bridgeNode: BridgeNode = {
@@ -1008,6 +1004,11 @@ export class RenderNodeInfo {
    */
   computeTimeColor: string;
 
+  /**
+   * Whether this node is faded out. Used when displaying stats.
+   */
+  isFadedOut: boolean;
+
   constructor(node: Node) {
     this.node = node;
     this.expanded = false;
@@ -1039,6 +1040,9 @@ export class RenderNodeInfo {
     this.isInExtract = false;
     this.isOutExtract = false;
     this.coreBox = {width: 0, height: 0};
+
+    // By default, we don't fade nodes out. Default to false for safety.
+    this.isFadedOut = false;
   }
 
   isInCore(): boolean {
@@ -1094,11 +1098,24 @@ export class RenderMetaedgeInfo {
    */
   edgeGroup: d3.Selection<RenderMetaedgeInfo>;
 
+  /** Id of the <marker> used as a start-marker for the edge path. */
+  startMarkerId: string;
+
+  /** Id of the <marker> used as an end-marker for the edge path. */
+  endMarkerId: string;
+
+  /**
+   * Whether this edge is faded out. Used for fading out unused edges when
+   * displaying run statistics.
+   */
+  isFadedOut: boolean;
+
   constructor(metaedge: Metaedge) {
     this.metaedge = metaedge;
     this.adjoiningMetaedge = null;
     this.structural = false;
     this.weight = 1;
+    this.isFadedOut = false;
   }
 }
 
@@ -1435,7 +1452,7 @@ export function mapIndexToHue(id: number): number {
  *
  * For root node, consider predefined types for source and sink.
  * We do not extract predefined type from non-root so that Variables and the
- * sgd node (op type = "NoOp") do not get extract from inside own group.
+ * sgd node (op type = 'NoOp') do not get extract from inside own group.
  *
  * The order of extraction is important here as swapping the order can totally
  * screw up the graph layout.

@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -259,6 +259,18 @@ class GradientsTest(test_util.TensorFlowTestCase):
       w = z * 3.0
       grads = gradients.gradients(z, [c])
       self.assertTrue(isinstance(grads[0], ops.Tensor))
+
+  def testSingletonIndexedSlices(self):
+    with ops.Graph().as_default():
+      x = tf.placeholder(tf.float32)
+      y = tf.identity(x)
+      dy = tf.IndexedSlices(tf.placeholder(tf.float32),
+                            tf.placeholder(tf.int32))
+      dx, = gradients.gradients(y, x, grad_ys=dy)
+      # The gradient of tf.identity should pass the value through unchanged.
+      # A previous version of the code did this only for tf.Tensor, not
+      # tf.IndexedSlices.
+      self.assertEqual(dx, dy)
 
 
 class FunctionGradientsTest(test_util.TensorFlowTestCase):

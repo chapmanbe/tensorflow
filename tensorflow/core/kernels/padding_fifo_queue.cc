@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -65,7 +65,15 @@ Status PaddingFIFOQueue::GetElementComponent(
 }
 
 void PaddingFIFOQueue::TryDequeueMany(int num_elements, OpKernelContext* ctx,
+                                      bool allow_small_batch,
                                       CallbackWithTuple callback) {
+  if (allow_small_batch) {
+    ctx->SetStatus(
+        errors::Unimplemented("Dequeue: Queue does not support small batches"));
+    callback(Tuple());
+    return;
+  }
+
   if (num_elements == 0) {
     Tuple tuple;
     tuple.reserve(num_components());

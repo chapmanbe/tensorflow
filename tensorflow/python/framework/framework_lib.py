@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@
 @@get_default_graph
 @@reset_default_graph
 @@import_graph_def
+@@load_file_system_library
 @@load_op_library
 
 ## Graph collections
@@ -66,6 +67,7 @@ from __future__ import division
 from __future__ import print_function
 
 # Classes used when building a Graph.
+from tensorflow.python.framework.device import DeviceSpec
 from tensorflow.python.framework.ops import Graph
 from tensorflow.python.framework.ops import Operation
 from tensorflow.python.framework.ops import Tensor
@@ -100,6 +102,7 @@ from tensorflow.python.framework.tensor_shape import TensorShape
 # Needed when interfacing tensorflow to new array libraries
 from tensorflow.python.framework.ops import register_tensor_conversion_function
 
+# go/tf-wildcard-import
 # pylint: disable=wildcard-import
 from tensorflow.python.framework.dtypes import *
 

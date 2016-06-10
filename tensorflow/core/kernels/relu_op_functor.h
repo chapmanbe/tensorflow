@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -52,7 +52,8 @@ struct ReluGrad {
     // associated gradient value. This allows the output of the Relu to be used,
     // as well as its input.
     backprops.device(d) =
-        gradients * (features > features.constant(static_cast<T>(0)));
+        gradients *
+        (features > features.constant(static_cast<T>(0))).template cast<T>();
   }
 };
 
@@ -85,8 +86,9 @@ struct Relu6Grad {
     // arbitrarily choose to not propagate the associated gradient
     // value.
     backprops.device(d) = gradients *
-                          (features > features.constant(static_cast<T>(0))) *
-                          (features < features.constant(static_cast<T>(6)));
+                          ((features > features.constant(static_cast<T>(0))) *
+                           (features < features.constant(static_cast<T>(6))))
+                              .template cast<T>();
   }
 };
 

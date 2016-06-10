@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -78,6 +78,9 @@ class NodeBuilder {
   NodeBuilder(StringPiece name, StringPiece op_name,
               const OpRegistryInterface* op_registry = OpRegistry::Global());
   NodeBuilder(StringPiece name, const OpDef* op_def);
+
+  // Create a NodeBuilder from an existing NodeDefBuilder.
+  NodeBuilder(const NodeDefBuilder& def_builder);
 
   // You must call one Input() function per input_arg in the Op,
   // *and in the same order as the input_args appear in the OpDef.*

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2016 Google Inc. All Rights Reserved.
+# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -70,13 +70,13 @@ fi
 COUNTER=1
 while true; do
   ((COUNTER++))
-  docker run --net=host --privileged ${DOCKER_ENV} \
+  docker run --rm --net=host --privileged ${DOCKER_ENV} \
       -v ${HOST_K8S_DIR}:/local/kubernetes \
       ${DOCKER_IMG_NAME} \
       /var/tf-k8s/local/start_local_k8s_service.sh
 
   if [[ $? == "23" ]]; then
-    if [[ $(echo "${COUNTER}>=${MAX_ATTEMPTS}" | bc -l) == "1" ]]; then
+    if [[ "${COUNTER}" -ge "${MAX_ATTEMPTS}" ]]; then
       echo "Reached maximum number of attempts (${MAX_ATTEMPTS}) "\
 "while attempting to start docker-in-docker for local k8s TensorFlow cluster"
       exit 1

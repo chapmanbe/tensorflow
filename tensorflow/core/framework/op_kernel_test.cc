@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -120,8 +120,8 @@ class OpKernelTest : public ::testing::Test {
   void ExpectEqual(const string& what, const DataTypeVector& expected,
                    const DataTypeVector& observed) {
     EXPECT_EQ(expected.size(), observed.size()) << what;
-    const int size = std::min(expected.size(), observed.size());
-    for (int i = 0; i < size; ++i) {
+    const size_t size = std::min(expected.size(), observed.size());
+    for (size_t i = 0; i < size; ++i) {
       bool match = TypesCompatible(expected[i], observed[i]);
       EXPECT_TRUE(match) << what << " i:" << i << ", expected: " << expected[i]
                          << ", observed: " << observed[i];

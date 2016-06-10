@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -224,7 +224,7 @@ class FFTOpsTest(BaseFFTOpsTest):
   def testError(self):
     if tf.test.is_built_with_cuda():
       for rank in VALID_FFT_RANKS:
-        for dims in range(0, rank) + [rank + 1]:
+        for dims in list(range(0, rank)) + [rank + 1]:
           x = np.zeros((1,) * dims).astype(np.complex64)
           with self.assertRaisesOpError(
               "Input must be of rank {} but got:".format(rank)):

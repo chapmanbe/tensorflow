@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -342,10 +342,10 @@ def maybe_download_and_extract():
 
     filepath, _ = urllib.request.urlretrieve(DATA_URL,
                                              filepath,
-                                             reporthook=_progress)
+                                             _progress)
     print()
     statinfo = os.stat(filepath)
-    print('Succesfully downloaded', filename, statinfo.st_size, 'bytes.')
+    print('Successfully downloaded', filename, statinfo.st_size, 'bytes.')
   tarfile.open(filepath, 'r:gz').extractall(dest_directory)
 
 
@@ -469,11 +469,11 @@ def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
     bottleneck_tensor: The bottleneck output layer of the CNN graph.
 
   Returns:
-    List of bottleneck arrays and their corresponding ground truthes.
+    List of bottleneck arrays and their corresponding ground truths.
   """
   class_count = len(image_lists.keys())
   bottlenecks = []
-  ground_truthes = []
+  ground_truths = []
   for unused_i in range(how_many):
     label_index = random.randrange(class_count)
     label_name = list(image_lists.keys())[label_index]
@@ -485,8 +485,8 @@ def get_random_cached_bottlenecks(sess, image_lists, how_many, category,
     ground_truth = np.zeros(class_count, dtype=np.float32)
     ground_truth[label_index] = 1.0
     bottlenecks.append(bottleneck)
-    ground_truthes.append(ground_truth)
-  return bottlenecks, ground_truthes
+    ground_truths.append(ground_truth)
+  return bottlenecks, ground_truths
 
 
 def get_random_distorted_bottlenecks(
@@ -514,20 +514,20 @@ def get_random_distorted_bottlenecks(
     bottleneck_tensor: The bottleneck output layer of the CNN graph.
 
   Returns:
-    List of bottleneck arrays and their corresponding ground truthes.
+    List of bottleneck arrays and their corresponding ground truths.
   """
   class_count = len(image_lists.keys())
   bottlenecks = []
-  ground_truthes = []
+  ground_truths = []
   for unused_i in range(how_many):
     label_index = random.randrange(class_count)
-    label_name = image_lists.keys()[label_index]
+    label_name = list(image_lists.keys())[label_index]
     image_index = random.randrange(65536)
     image_path = get_image_path(image_lists, label_name, image_index, image_dir,
                                 category)
     if not gfile.Exists(image_path):
       tf.logging.fatal('File does not exist %s', image_path)
-    jpeg_data = gfile.FastGFile(image_path, 'r').read()
+    jpeg_data = gfile.FastGFile(image_path, 'rb').read()
     # Note that we materialize the distorted_image_data as a numpy array before
     # sending running inference on the image. This involves 2 memory copies and
     # might be optimized in other implementations.
@@ -539,8 +539,8 @@ def get_random_distorted_bottlenecks(
     ground_truth = np.zeros(class_count, dtype=np.float32)
     ground_truth[label_index] = 1.0
     bottlenecks.append(bottleneck)
-    ground_truthes.append(ground_truth)
-  return bottlenecks, ground_truthes
+    ground_truths.append(ground_truth)
+  return bottlenecks, ground_truths
 
 
 def should_distort_images(flip_left_right, random_crop, random_scale,
@@ -616,7 +616,7 @@ def add_input_distortions(flip_left_right, random_crop, random_scale,
   """
 
   jpeg_data = tf.placeholder(tf.string, name='DistortJPGInput')
-  decoded_image = tf.image.decode_jpeg(jpeg_data)
+  decoded_image = tf.image.decode_jpeg(jpeg_data, channels=MODEL_INPUT_DEPTH)
   decoded_image_as_float = tf.cast(decoded_image, dtype=tf.float32)
   decoded_image_4d = tf.expand_dims(decoded_image_as_float, 0)
   margin_scale = 1.0 + (random_crop / 100.0)
@@ -734,7 +734,7 @@ def main(_):
   sess = tf.Session()
 
   if do_distort_images:
-    # We will be applying distortions, so set upthe operations we'll need.
+    # We will be applying distortions, so setup the operations we'll need.
     distorted_jpeg_data_tensor, distorted_image_tensor = add_input_distortions(
         FLAGS.flip_left_right, FLAGS.random_crop, FLAGS.random_scale,
         FLAGS.random_brightness)

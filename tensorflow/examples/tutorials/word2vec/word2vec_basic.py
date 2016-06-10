@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 # ==============================================================================
 
 from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
 
 import collections
@@ -50,7 +51,7 @@ filename = maybe_download('text8.zip', 31344016)
 def read_data(filename):
   """Extract the first file enclosed in a zip file as a list of words"""
   with zipfile.ZipFile(filename) as f:
-    data = f.read(f.namelist()[0]).split()
+    data = tf.compat.as_str(f.read(f.namelist()[0])).split()
   return data
 
 words = read_data(filename)
@@ -81,7 +82,7 @@ def build_dataset(words):
 data, count, dictionary, reverse_dictionary = build_dataset(words)
 del words  # Hint to reduce memory.
 print('Most common words (+UNK)', count[:5])
-print('Sample data', data[:10])
+print('Sample data', data[:10], [reverse_dictionary[i] for i in data[:10]])
 
 data_index = 0
 
@@ -113,8 +114,8 @@ def generate_batch(batch_size, num_skips, skip_window):
 
 batch, labels = generate_batch(batch_size=8, num_skips=2, skip_window=1)
 for i in range(8):
-  print(batch[i], '->', labels[i, 0])
-  print(reverse_dictionary[batch[i]], '->', reverse_dictionary[labels[i, 0]])
+  print(batch[i], reverse_dictionary[batch[i]],
+      '->', labels[i, 0], reverse_dictionary[labels[i, 0]])
 
 # Step 4: Build and train a skip-gram model.
 
@@ -171,12 +172,15 @@ with graph.as_default():
   similarity = tf.matmul(
       valid_embeddings, normalized_embeddings, transpose_b=True)
 
+  # Add variable initializer.
+  init = tf.initialize_all_variables()
+
 # Step 5: Begin training.
 num_steps = 100001
 
 with tf.Session(graph=graph) as session:
   # We must initialize all variables before we use them.
-  tf.initialize_all_variables().run()
+  init.run()
   print("Initialized")
 
   average_loss = 0

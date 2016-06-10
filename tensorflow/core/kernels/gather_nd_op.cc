@@ -1,4 +1,4 @@
-/* Copyright 2016 Google Inc. All Rights Reserved.
+/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -200,7 +200,7 @@ namespace functor {
       const GPUDevice& d, typename TTypes<T, NDIM>::ConstTensor Tparams, \
       typename TTypes<Index>::ConstMatrix Tindices,                      \
       typename TTypes<T>::Flat Tout);                                    \
-  extern template struct GatherNd<GPUDevice, T, Index, NDIM>
+  extern template struct GatherNd<GPUDevice, T, Index, NDIM>;
 
 #define DECLARE_GPU_SPECS_INDEX(T, Index)    \
   DECLARE_GPU_SPECS_INDEX_NDIM(T, Index, 1); \

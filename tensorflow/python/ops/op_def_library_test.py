@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -75,6 +75,7 @@ ops.RegisterShape("ReservedInput")(None)
 ops.RegisterShape("Restrict")(None)
 ops.RegisterShape("Simple")(None)
 ops.RegisterShape("SimpleStruct")(None)
+ops.RegisterShape("TwoRefsIn")(None)
 ops.RegisterShape("TypeList")(None)
 ops.RegisterShape("TypeListRestrict")(None)
 ops.RegisterShape("TypeListTwice")(None)
@@ -220,12 +221,6 @@ class OpDefLibraryTest(test_util.TensorFlowTestCase):
       self._lib.apply_op("Simple", wrong=7)
     self.assertEqual(str(cm.exception), "No argument for input a")
 
-    with self.assertRaises(TypeError) as cm:
-      self._lib.apply_op("Simple", a=[self.Tensor(dtypes.int32)])
-    self.assertStartsWith(str(cm.exception),
-                          "Expected int32, got list containing Tensors of type "
-                          "'_Message' instead.")
-
   def testReservedInput(self):
     self._add_op("name: 'ReservedInput' "
                  "input_arg { name: 'input' type: DT_INT32 } ")
@@ -265,11 +260,6 @@ class OpDefLibraryTest(test_util.TensorFlowTestCase):
       self._lib.apply_op("Polymorphic", a="s", T=dtypes.string)
     self.assertEqual(str(cm.exception),
                      "Should not specify value for inferred attr 'T'.")
-
-    with self.assertRaises(TypeError) as cm:
-      self._lib.apply_op("Polymorphic", a=[self.Tensor(dtypes.bool)])
-    self.assertEqual(str(cm.exception),
-                     "List of Tensors when single Tensor expected")
 
   def testPolymorphicOut(self):
     self._add_op("name: 'PolymorphicOut' "
@@ -409,6 +399,12 @@ class OpDefLibraryTest(test_util.TensorFlowTestCase):
     self.assertStartsWith(str(cm.exception),
                           "Expected list for 'a' "
                           "argument to 'TypeList' Op, not ")
+
+    with self.assertRaises(TypeError) as cm:
+      self._lib.apply_op("TypeList", a=[self.Tensor(dtypes.int32), None])
+    self.assertStartsWith(str(cm.exception),
+                          "Tensors in list passed to 'a' of 'TypeList' Op "
+                          "have types [int32, <NOT CONVERTIBLE TO TENSOR>]")
 
   def testTypeListTwice(self):
     self._add_op("name: 'TypeListTwice' "
@@ -711,7 +707,7 @@ class OpDefLibraryTest(test_util.TensorFlowTestCase):
     #                  "Don't know how to convert 5 to a TensorShapeProto for "
     #                  "argument 'a'")
 
-    with self.assertRaises(ValueError):
+    with self.assertRaises(TypeError):
       self._lib.apply_op("AttrShape", a="ABC")
 
   def testAttrShapeList(self):
@@ -778,7 +774,7 @@ class OpDefLibraryTest(test_util.TensorFlowTestCase):
     #                  "Don't know how to convert 5 to a TensorShapeProto for "
     #                  "argument 'a'")
 
-    with self.assertRaises(ValueError) as cm:
+    with self.assertRaises(TypeError) as cm:
       self._lib.apply_op("AttrPartialShape", a="ABC")
 
   def testAttrPartialShapeList(self):
@@ -967,6 +963,16 @@ class OpDefLibraryTest(test_util.TensorFlowTestCase):
       attr { key: 'N' value { i: 2 } }
       """, op.node_def)
 
+    op = self._lib.apply_op("NPolymorphicIn",
+                            a=[self.Tensor(dtypes.float32, name="y"),
+                               self.Tensor(dtypes.float32_ref, name="z")],
+                            name="r")
+    self.assertProtoEquals("""
+      name: 'r' op: 'NPolymorphicIn' input: 'y' input: 'z'
+      attr { key: 'T' value { type: DT_FLOAT } }
+      attr { key: 'N' value { i: 2 } }
+      """, op.node_def)
+
     with self.assertRaises(ValueError) as cm:
       self._lib.apply_op("NPolymorphicIn", a=[99])
     self.assertEqual(str(cm.exception),
@@ -976,8 +982,8 @@ class OpDefLibraryTest(test_util.TensorFlowTestCase):
     with self.assertRaises(TypeError) as cm:
       self._lib.apply_op("NPolymorphicIn", a=[38, "bar"])
     self.assertEqual(str(cm.exception),
-                     "All tensors passed to 'a' of 'NPolymorphicIn' "
-                     "Op must have the same type.")
+                     "Tensors in list passed to 'a' of 'NPolymorphicIn' Op "
+                     "have types [int32, string] that don't all match.")
 
     with self.assertRaises(TypeError) as cm:
       self._lib.apply_op("NPolymorphicIn",
@@ -985,6 +991,13 @@ class OpDefLibraryTest(test_util.TensorFlowTestCase):
     self.assertEqual(str(cm.exception),
                      "Tensors in list passed to 'a' of 'NPolymorphicIn' Op "
                      "have types [int32, string] that don't all match.")
+
+    with self.assertRaises(TypeError) as cm:
+      self._lib.apply_op("NPolymorphicIn", a=[38, None])
+    self.assertEqual(str(cm.exception),
+                     "Tensors in list passed to 'a' of 'NPolymorphicIn' Op "
+                     "have types [int32, <NOT CONVERTIBLE TO TENSOR>] that "
+                     "don't all match.")
 
     with self.assertRaises(TypeError) as cm:
       self._lib.apply_op("NPolymorphicIn",
@@ -1356,6 +1369,10 @@ class OpDefLibraryTest(test_util.TensorFlowTestCase):
     self._add_op("name: 'RefIn' "
                  "input_arg { name: 'a' type_attr: 'T' is_ref: true } "
                  "attr { name: 'T' type: 'type' } ")
+    self._add_op("name: 'TwoRefsIn' "
+                 "input_arg { name: 'a' type_attr: 'T' is_ref: true } "
+                 "input_arg { name: 'b' type_attr: 'T' is_ref: true } "
+                 "attr { name: 'T' type: 'type' } ")
     self._add_op("name: 'RefOut' "
                  "output_arg { name: 'a' type_attr: 'T' is_ref: true } "
                  "attr { name: 'T' type: 'type' } ")
@@ -1371,6 +1388,7 @@ class OpDefLibraryTest(test_util.TensorFlowTestCase):
     self.assertProtoEquals("""
       name: 'i' op: 'RefIn' input: 'o'
       attr { key: 'T' value { type: DT_BOOL } }
+      attr { key: "_class" value { list { s: "loc:@o" } } }
       """, op.node_def)
 
     # Can pass ref to non-ref input.
@@ -1385,6 +1403,17 @@ class OpDefLibraryTest(test_util.TensorFlowTestCase):
       self._lib.apply_op("RefIn", a=2)
     self.assertEqual(str(cm.exception),
                      "Input 'a' of 'RefIn' Op requires l-value input")
+
+    input_a = self._lib.apply_op("RefOut", T=dtypes.int32, name="t")
+    input_b = self._lib.apply_op("RefOut", T=dtypes.int32, name="u")
+    op = self._lib.apply_op("TwoRefsIn", a=input_a, b=input_b, name="v")
+    # NOTE(mrry): The order of colocation constraints is an implementation
+    # detail.
+    self.assertProtoEquals("""
+      name: 'v' op: 'TwoRefsIn' input: 't' input: 'u'
+      attr { key: 'T' value { type: DT_INT32 } }
+      attr { key: "_class" value { list { s: "loc:@t" s: "loc:@u" } } }
+      """, op.node_def)
 
   def testSpecifyDevice(self):
     with self._g.device("/job:ADevice"):

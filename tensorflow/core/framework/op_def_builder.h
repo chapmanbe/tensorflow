@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -88,6 +88,9 @@ class OpDefBuilder {
   OpDefBuilder& SetIsAggregate();
   OpDefBuilder& SetIsStateful();
   OpDefBuilder& SetAllowsUninitializedInput();
+
+  // Deprecate the op at a certain GraphDef version.
+  OpDefBuilder& Deprecated(int version, StringPiece explanation);
 
   // Adds docs to this OpDefBuilder (and returns *this).
   // Docs have the format:
